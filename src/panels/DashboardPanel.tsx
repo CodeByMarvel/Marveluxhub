@@ -1,61 +1,122 @@
+import { useEffect, useState } from "react";
 import { tokens } from "../tokens";
 import { Btn, Card, PageHeader, ScrollArea, StatCard, MiniBar, Sparkline, Badge, LogItem } from "../components/ui";
 import { useToast } from "../components/Toast";
+import { getDashboard, type DashboardStats } from "../services/api";
+
+function fmtNum(n: number): string {
+  return n.toLocaleString();
+}
+function fmtKes(n: number): string {
+  if (n >= 1_000_000) return `KES ${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `KES ${(n / 1_000).toFixed(1)}k`;
+  return `KES ${n}`;
+}
 
 export function DashboardPanel() {
   const toast = useToast();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  function load() {
+    setLoading(true);
+    getDashboard()
+      .then(setStats)
+      .catch((e: Error) => toast(e.message, "danger"))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  const s = stats;
+  const dash = (v: string | number | undefined) =>
+    loading ? "…" : v !== undefined ? String(v) : "—";
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden", animation: "fadeUp .2s ease" }}>
       <PageHeader
         eyebrow="Overview" title="DASHBOARD"
-        desc="Mar 20, 2026 · All systems operational"
+        desc={loading ? "Loading…" : "All systems operational"}
         actions={<>
-          <Btn onClick={() => toast("Refreshing data…", "info")}>↺ Refresh</Btn>
+          <Btn onClick={load}>↺ Refresh</Btn>
           <Btn variant="primary" onClick={() => toast("Report exported to your email", "success")}>Export Report</Btn>
         </>}
       />
       <ScrollArea>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 14, marginBottom: 24 }}>
-          <StatCard label="Total Users"       value="3,842" delta="↑ +124 this week"     deltaType="up"   colorVariant="green" />
-          <StatCard label="Active Mechanics"  value="218"   delta="↑ +12 this month"     deltaType="up"   colorVariant="green" />
-          <StatCard label="Open Complaints"   value="4"     delta="↑ +2 since yesterday" deltaType="down" colorVariant="red" />
-          <StatCard label="Avg Response Time" value="18m"   delta="↓ Slower than target" deltaType="warn" colorVariant="amber" />
+          <StatCard
+            label="Pending Approvals"
+            value={dash(s?.pending_mechanics)}
+            delta="mechanics awaiting review"
+            deltaType="warn"
+            colorVariant="amber"
+          />
+          <StatCard
+            label="Active Jobs"
+            value={dash(s?.active_requests)}
+            delta="currently in progress"
+            deltaType="up"
+            colorVariant="green"
+          />
+          <StatCard
+            label="Funds in Escrow"
+            value={loading ? "…" : s ? fmtKes(s.held_escrow_total_kes) : "—"}
+            delta="currently held"
+            deltaType="up"
+            colorVariant="green"
+          />
+          <StatCard
+            label="New Customers (7d)"
+            value={dash(s?.new_customers_7d)}
+            delta="this week"
+            deltaType="up"
+            colorVariant="green"
+          />
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-          <Card title="Weekly Bookings" subtitle="Mon → Sun this week" actions={<Badge variant="green">Live</Badge>}>
+          <Card title="Revenue (7 days)" subtitle="Gross deposits into escrow" actions={<Badge variant="green">Live</Badge>}>
             <div style={{ padding: "16px 20px" }}>
-              <Sparkline data={[142, 198, 175, 231, 218, 189, 94]} />
+              <Sparkline data={[0, 0, 0, 0, 0, 0, 0]} />
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 5 }}>
                 <span style={{ fontSize: 10, color: tokens.text3, fontFamily: "'DM Mono', monospace" }}>MON</span>
                 <span style={{ fontSize: 10, color: tokens.text3, fontFamily: "'DM Mono', monospace" }}>SUN</span>
               </div>
               <div style={{ display: "flex", gap: 20, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${tokens.border}` }}>
-                {[
-                  ["THIS WEEK", "1,247", tokens.green],
-                  ["LAST WEEK", "1,094", tokens.text2],
-                ].map(([lbl, val, col]) => (
-                  <div key={lbl}>
-                    <div style={{ fontSize: 10, color: tokens.text3, fontFamily: "'DM Mono', monospace", letterSpacing: ".8px", marginBottom: 4 }}>{lbl}</div>
-                    <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, letterSpacing: 1, color: col }}>{val}</div>
+                <div>
+                  <div style={{ fontSize: 10, color: tokens.text3, fontFamily: "'DM Mono', monospace", letterSpacing: ".8px", marginBottom: 4 }}>7-DAY REVENUE</div>
+                  <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, letterSpacing: 1, color: tokens.green }}>
+                    {loading ? "…" : s ? fmtKes(s.revenue_7d_kes) : "—"}
                   </div>
-                ))}
-                <div style={{ marginLeft: "auto", textAlign: "right" }}>
-                  <div style={{ fontSize: 10, color: tokens.text3, fontFamily: "'DM Mono', monospace", letterSpacing: ".8px", marginBottom: 4 }}>GROWTH</div>
-                  <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, letterSpacing: 1, color: tokens.green }}>+14%</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: tokens.text3, fontFamily: "'DM Mono', monospace", letterSpacing: ".8px", marginBottom: 4 }}>ESCROW HELD</div>
+                  <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, letterSpacing: 1, color: tokens.text2 }}>
+                    {loading ? "…" : s ? fmtKes(s.held_escrow_total_kes) : "—"}
+                  </div>
                 </div>
               </div>
             </div>
           </Card>
 
-          <Card title="Service Categories" subtitle="Top booking types">
+          <Card title="Top Mechanics" subtitle="By completed jobs">
             <div style={{ padding: "16px 20px" }}>
-              <MiniBar label="Oil Change"   pct={78} value="78%" color={tokens.green} />
-              <MiniBar label="Tyre Service" pct={62} value="62%" color={tokens.green} opacity={0.7} />
-              <MiniBar label="Diagnostics"  pct={44} value="44%" color={tokens.amber} />
-              <MiniBar label="Brakes"       pct={35} value="35%" color={tokens.amber} opacity={0.7} />
-              <MiniBar label="Electrical"   pct={22} value="22%" color={tokens.text3} />
+              {loading && (
+                <div style={{ color: tokens.text3, fontSize: 12, fontFamily: "'DM Mono', monospace" }}>Loading…</div>
+              )}
+              {!loading && (!s?.top_mechanics?.length) && (
+                <div style={{ color: tokens.text3, fontSize: 12, fontFamily: "'DM Mono', monospace" }}>No data yet</div>
+              )}
+              {s?.top_mechanics?.map((m, i) => (
+                <MiniBar
+                  key={m.id}
+                  label={m.name ?? `Mechanic ${i + 1}`}
+                  pct={s.top_mechanics[0]?.job_count ? Math.round((m.job_count / s.top_mechanics[0].job_count) * 100) : 0}
+                  value={`${m.job_count} jobs`}
+                  color={i === 0 ? tokens.green : tokens.green}
+                  opacity={1 - i * 0.15}
+                />
+              ))}
             </div>
           </Card>
         </div>

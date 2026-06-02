@@ -1,93 +1,112 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { tokens } from "../tokens";
 import { Badge, Btn, IconBtn, Card, PageHeader, ScrollArea, FilterBar, StatCard, Avatar, EyeIcon, CheckIcon, BanIcon, thStyle, tdStyle } from "../components/ui";
 import { useToast } from "../components/Toast";
 import { ApproveMechanicModal, type PendingMechanic } from "../modals/ApproveMechanicModal";
+import { getPendingMechanics, approveMechanic, rejectMechanic, type ApiMechanic } from "../services/api";
 
-const INITIAL_APPLICANTS: PendingMechanic[] = [
-  {
-    id: "APP-001", name: "Moses Odhiambo", email: "m.odhiambo@gmail.com",  phone: "+254 712 334455",
-    location: "Nairobi", applied: "Mar 18, 2026", spec: "General Repair",    experience: "6 years",
-    docs: { national_id: true,  certificate: true,  photo: true,  police_clearance: false },
-  },
-  {
-    id: "APP-002", name: "Faith Chebet",   email: "f.chebet@yahoo.com",     phone: "+254 733 667788",
-    location: "Eldoret", applied: "Mar 17, 2026", spec: "Diagnostics",       experience: "3 years",
-    docs: { national_id: true,  certificate: false, photo: true,  police_clearance: false },
-  },
-  {
-    id: "APP-003", name: "Samuel Njoroge", email: "s.njoroge@hotmail.com",  phone: "+254 722 998877",
-    location: "Nakuru",  applied: "Mar 16, 2026", spec: "Electrical",        experience: "9 years",
-    docs: { national_id: true,  certificate: true,  photo: true,  police_clearance: true  },
-  },
-  {
-    id: "APP-004", name: "Lydia Kamau",    email: "l.kamau@gmail.com",      phone: "+254 700 112233",
-    location: "Mombasa", applied: "Mar 15, 2026", spec: "Tyres & Suspension", experience: "4 years",
-    docs: { national_id: false, certificate: false, photo: false, police_clearance: false },
-  },
-  {
-    id: "APP-005", name: "Peter Wekesa",   email: "p.wekesa@gmail.com",     phone: "+254 755 443322",
-    location: "Kisumu",  applied: "Mar 14, 2026", spec: "Brakes & Clutch",   experience: "7 years",
-    docs: { national_id: true,  certificate: true,  photo: true,  police_clearance: true  },
-  },
-];
+function mapToPending(m: ApiMechanic): PendingMechanic {
+  return {
+    id:         m.id,
+    name:       m.profiles?.name ?? "Unknown",
+    email:      "",
+    phone:      m.profiles?.phone ?? "—",
+    location:   "—",
+    applied:    new Date(m.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+    spec:       m.mechanic_type === "mobile" ? "Mobile Technician" : m.mechanic_type === "garage" ? "Garage Partner" : "—",
+    experience: "—",
+    docs: {
+      national_id:       !!m.national_id_url,
+      certificate:       !!m.certificate_url,
+      photo:             !!m.photo_url,
+      police_clearance:  !!m.police_clearance_url,
+    },
+  };
+}
 
 function docsComplete(docs: PendingMechanic["docs"]) {
   return Object.values(docs).every(Boolean);
 }
-
 function docCount(docs: PendingMechanic["docs"]) {
   return Object.values(docs).filter(Boolean).length;
 }
 
 export function ApprovalsPanel() {
   const toast = useToast();
-  const [applicants, setApplicants] = useState(INITIAL_APPLICANTS);
+  const [applicants, setApplicants] = useState<PendingMechanic[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<PendingMechanic | null>(null);
+
+  function load() {
+    setLoading(true);
+    getPendingMechanics()
+      .then(data => setApplicants(data.map(mapToPending)))
+      .catch((e: Error) => toast(e.message, "danger"))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
 
   const filtered = applicants.filter(a =>
     `${a.name} ${a.email} ${a.spec} ${a.location}`.toLowerCase().includes(search.toLowerCase())
   );
 
-  const approve = (id: string) =>
-    setApplicants(prev => prev.filter(a => a.id !== id));
+  async function handleApprove(id: string) {
+    try {
+      await approveMechanic(id, 1);
+      setApplicants(prev => prev.filter(a => a.id !== id));
+      toast("Mechanic approved and onboarded", "success");
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : "Failed to approve", "danger");
+    }
+  }
 
-  const reject = (id: string) =>
-    setApplicants(prev => prev.filter(a => a.id !== id));
+  async function handleReject(id: string) {
+    try {
+      await rejectMechanic(id);
+      setApplicants(prev => prev.filter(a => a.id !== id));
+      toast("Application rejected", "danger");
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : "Failed to reject", "danger");
+    }
+  }
 
-  const readyCount = applicants.filter(a => docsComplete(a.docs)).length;
-  const pendingDocs = applicants.filter(a => !docsComplete(a.docs)).length;
+  const readyCount   = applicants.filter(a => docsComplete(a.docs)).length;
+  const pendingDocs  = applicants.filter(a => !docsComplete(a.docs)).length;
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden", animation: "fadeUp .2s ease" }}>
       <PageHeader
         eyebrow="Operations" title="APPROVALS"
-        desc={`${applicants.length} pending · ${readyCount} ready to approve · ${pendingDocs} awaiting documents`}
+        desc={loading ? "Loading…" : `${applicants.length} pending · ${readyCount} ready to approve · ${pendingDocs} awaiting documents`}
         actions={<Btn onClick={() => toast("Approval queue exported", "success")}>Export Queue</Btn>}
       />
       <ScrollArea>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 24 }}>
-          <StatCard label="Pending Applications" value={String(applicants.length)}  colorVariant="amber" />
-          <StatCard label="Docs Complete"         value={String(readyCount)}         colorVariant="green" />
-          <StatCard label="Awaiting Documents"    value={String(pendingDocs)}        colorVariant="red" />
+          <StatCard label="Pending Applications" value={loading ? "…" : String(applicants.length)} colorVariant="amber" />
+          <StatCard label="Docs Complete"        value={loading ? "…" : String(readyCount)}         colorVariant="green" />
+          <StatCard label="Awaiting Documents"   value={loading ? "…" : String(pendingDocs)}        colorVariant="red" />
         </div>
 
         <FilterBar
           placeholder="Search applicants…" onSearch={setSearch}
-          selects={[["All Specialities", "General Repair", "Electrical", "Diagnostics", "Tyres & Suspension", "Brakes & Clutch"], ["All Locations", "Nairobi", "Mombasa", "Kisumu", "Nakuru", "Eldoret"]]}
+          selects={[["All Specialities", "Mobile Technician", "Garage Partner"], ["All Locations", "Nairobi", "Mombasa", "Kisumu", "Nakuru", "Eldoret"]]}
         />
 
         <Card title="Pending Applications" subtitle="New mechanic applicants awaiting verification">
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
-                <tr>{["Applicant","Speciality","Location","Experience","Documents","Applied","Actions"].map(h => (
+                <tr>{["Applicant", "Speciality", "Location", "Experience", "Documents", "Applied", "Actions"].map(h => (
                   <th key={h} style={thStyle}>{h}</th>
                 ))}</tr>
               </thead>
               <tbody>
-                {filtered.length === 0 && (
+                {loading && (
+                  <tr><td colSpan={7} style={{ padding: "32px 16px", textAlign: "center", color: tokens.text3, fontSize: 13, fontFamily: "'DM Mono', monospace" }}>Loading…</td></tr>
+                )}
+                {!loading && filtered.length === 0 && (
                   <tr>
                     <td colSpan={7} style={{ padding: "32px 16px", textAlign: "center", color: tokens.text3, fontSize: 13 }}>
                       No pending applications
@@ -95,22 +114,19 @@ export function ApprovalsPanel() {
                   </tr>
                 )}
                 {filtered.map(a => {
-                  const verified = docsComplete(a.docs);
-                  const count = docCount(a.docs);
-                  const initials = a.name.split(" ").map(w => w[0]).join("").slice(0, 2);
+                  const verified  = docsComplete(a.docs);
+                  const count     = docCount(a.docs);
+                  const initials  = a.name.split(" ").map(w => w[0]).join("").slice(0, 2);
                   return (
                     <tr key={a.id}
                       onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.025)")}
                       onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
                       <td style={tdStyle}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <Avatar
-                            initials={initials}
-                            bg="rgba(245,166,35,0.1)" color={tokens.amber} border={tokens.amberBorder}
-                          />
+                          <Avatar initials={initials} bg="rgba(245,166,35,0.1)" color={tokens.amber} border={tokens.amberBorder} />
                           <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: tokens.text }}>{a.name}</div>
-                            <div style={{ fontSize: 11, color: tokens.text3, fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{a.email}</div>
+                            <div style={{ fontSize: 11, color: tokens.text3, fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{a.phone}</div>
                           </div>
                         </div>
                       </td>
@@ -119,13 +135,9 @@ export function ApprovalsPanel() {
                       <td style={{ ...tdStyle, fontFamily: "'DM Mono', monospace", fontSize: 12, color: tokens.text2 }}>{a.experience}</td>
                       <td style={tdStyle}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          {/* mini doc bar */}
                           <div style={{ display: "flex", gap: 3 }}>
                             {Object.values(a.docs).map((v, i) => (
-                              <div key={i} style={{
-                                width: 8, height: 8, borderRadius: 2,
-                                background: v ? tokens.green : tokens.border,
-                              }} />
+                              <div key={i} style={{ width: 8, height: 8, borderRadius: 2, background: v ? tokens.green : tokens.border }} />
                             ))}
                           </div>
                           <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: verified ? tokens.green : tokens.amber }}>
@@ -142,11 +154,10 @@ export function ApprovalsPanel() {
                             variant="green" title={verified ? "Approve" : "Docs incomplete"}
                             onClick={() => {
                               if (!verified) { toast("Complete document verification first", "warn"); return; }
-                              toast(`${a.name} approved and onboarded`, "success");
-                              approve(a.id);
+                              handleApprove(a.id);
                             }}
                           ><CheckIcon /></IconBtn>
-                          <IconBtn variant="red" title="Reject" onClick={() => { toast(`Application rejected: ${a.name}`, "danger"); reject(a.id); }}><BanIcon /></IconBtn>
+                          <IconBtn variant="red" title="Reject" onClick={() => handleReject(a.id)}><BanIcon /></IconBtn>
                         </div>
                       </td>
                     </tr>
@@ -157,7 +168,6 @@ export function ApprovalsPanel() {
           </div>
         </Card>
 
-        {/* Doc legend */}
         <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 11, color: tokens.text3, fontFamily: "'DM Mono', monospace", marginTop: -8 }}>
           <span style={{ letterSpacing: 1 }}>DOCUMENT KEY:</span>
           {["National ID", "Certificate", "Photo", "Police Clearance"].map((label, i) => (
@@ -171,8 +181,8 @@ export function ApprovalsPanel() {
 
       <ApproveMechanicModal
         mechanic={selected} open={!!selected} onClose={() => setSelected(null)}
-        onApprove={id => { approve(id); setSelected(null); }}
-        onReject={id => { reject(id); setSelected(null); }}
+        onApprove={id => { handleApprove(id); setSelected(null); }}
+        onReject={id => { handleReject(id); setSelected(null); }}
       />
     </div>
   );

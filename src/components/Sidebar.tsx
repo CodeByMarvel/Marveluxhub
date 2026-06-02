@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { tokens } from "../tokens";
 import { Avatar } from "./ui";
+import logo from "../assets/logo.png";
 
 const NAV_ITEMS = [
   { group: "Overview",   items: [{ id: "dashboard",  label: "Dashboard",   icon: "grid" }] },
@@ -25,9 +26,9 @@ function NavIcon({ type }: { type: string }) {
 }
 
 export function Sidebar({
-  activePanel, onNavigate,
+  activePanel, onNavigate, onLogout,
 }: {
-  activePanel: string; onNavigate: (id: string) => void;
+  activePanel: string; onNavigate: (id: string) => void; onLogout?: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -54,7 +55,7 @@ export function Sidebar({
 
       {/* Logo */}
       <div style={{ height: 60, display: "flex", alignItems: "center", gap: 12, padding: "0 14px", borderBottom: `1px solid ${tokens.border}`, flexShrink: 0, overflow: "hidden", whiteSpace: "nowrap" }}>
-        <div style={{ width: 32, height: 32, background: tokens.green, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, color: "#0A0A0A" }}>F</div>
+        <img src={logo} alt="Fundi-X" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
         <div style={{ opacity: collapsed ? 0 : 1, transition: "opacity 0.22s", pointerEvents: collapsed ? "none" : "auto" }}>
           <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 17, letterSpacing: "1.5px", color: tokens.text, lineHeight: 1 }}>FUNDI-X</div>
           <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: tokens.green, letterSpacing: 2, textTransform: "uppercase" }}>Admin Console</div>
@@ -97,10 +98,21 @@ export function Sidebar({
       {/* Footer */}
       <div style={{ padding: "12px 14px", borderTop: `1px solid ${tokens.border}`, display: "flex", alignItems: "center", gap: 10, overflow: "hidden", whiteSpace: "nowrap", flexShrink: 0 }}>
         <Avatar initials="AO" bg={tokens.greenDim} color={tokens.green} border={tokens.greenBorder} />
-        <div style={{ opacity: collapsed ? 0 : 1, transition: "opacity 0.22s" }}>
+        <div style={{ opacity: collapsed ? 0 : 1, transition: "opacity 0.22s", flex: 1 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: tokens.text }}>Admin Ops</div>
           <div style={{ fontSize: 10, color: tokens.green, fontFamily: "'DM Mono', monospace", letterSpacing: ".5px" }}>SUPERADMIN</div>
         </div>
+        {onLogout && !collapsed && (
+          <button onClick={onLogout} title="Sign out" style={{
+            background: "none", border: "none", cursor: "pointer",
+            color: tokens.text3, padding: 4, display: "flex", alignItems: "center",
+            flexShrink: 0,
+          }}>
+            <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+          </button>
+        )}
       </div>
     </aside>
   );

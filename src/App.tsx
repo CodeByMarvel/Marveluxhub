@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { globalStyle } from "./tokens";
+import { globalStyle, tokens } from "./tokens";
 import { ToastProvider } from "./components/Toast";
 import { Sidebar } from "./components/Sidebar";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import { LoginPanel } from "./panels/LoginPanel";
 import { DashboardPanel } from "./panels/DashboardPanel";
 import { CustomersPanel } from "./panels/CustomersPanel";
 import { MechanicsPanel } from "./panels/MechanicsPanel";
@@ -24,16 +26,39 @@ const PANELS: Record<PanelId, React.ReactNode> = {
   settings:   <SettingsPanel />,
 };
 
-export default function App() {
+function Shell() {
+  const { token, loading, logout } = useAuth();
   const [activePanel, setActivePanel] = useState<PanelId>("dashboard");
 
-  return (
-    <ToastProvider>
-      <style>{globalStyle}</style>
-      <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "#0A0A0A" }}>
-        <Sidebar activePanel={activePanel} onNavigate={id => setActivePanel(id as PanelId)} />
-        {PANELS[activePanel]}
+  if (loading) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: tokens.text3, fontFamily: "'DM Mono', monospace", fontSize: 12 }}>
+        LOADING…
       </div>
-    </ToastProvider>
+    );
+  }
+
+  if (!token) return <LoginPanel />;
+
+  return (
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "#0A0A0A" }}>
+      <Sidebar
+        activePanel={activePanel}
+        onNavigate={id => setActivePanel(id as PanelId)}
+        onLogout={logout}
+      />
+      {PANELS[activePanel]}
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <ToastProvider>
+        <style>{globalStyle}</style>
+        <Shell />
+      </ToastProvider>
+    </AuthProvider>
   );
 }
